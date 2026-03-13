@@ -4,8 +4,8 @@
     .fingerprint = 0x9947018c924eecb2,
     .dependencies = .{
         .zfat = .{
-            .url = "git+https://github.com/khitiara/zfat?ref=0.15#4ce2a6a95d4410573dcc1c159085f554465aea04",
-            .hash = "zfat-0.15.0-SNNK9QCZcgBdWwpwf_lzSuKP12w2HZQnIQwT4qn8TfZi",
+            .url = "git+https://github.com/khitiara/zfat?ref=0.15#4bd56e3905b537b06877a301c6f4f0c462a2cb8a",
+            .hash = "zfat-0.15.0-SNNK9e-YcgBoU_BG3WuNXvo3Mkaz79C-m9_igwmJ224v",
         },
         .args = .{
             .url = "git+https://github.com/khitiara/zig-args#4085c9be55dfd2eeb6893694510a2ce97e89f9fe",
