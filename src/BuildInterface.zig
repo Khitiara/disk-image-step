@@ -452,7 +452,7 @@ pub const FileSystemBuilder = struct {
     pub fn init(b: *std.Build) FileSystemBuilder {
         return FileSystemBuilder{
             .b = b,
-            .list = .{},
+            .list = .empty,
         };
     }
 
