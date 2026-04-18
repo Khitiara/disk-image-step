@@ -19,11 +19,11 @@ pub fn parse(ctx: dim.Context, stdio: std.Io) !dim.Content {
     }));
 }
 
-fn render(self: *FillData, io: std.Io,  stream: *dim.BinaryStream) dim.Content.RenderError!void {
+fn render(self: *FillData, io: std.Io, stream: *dim.BinaryStream) dim.Content.RenderError!void {
     var writer = stream.writer(io, &.{});
     writer.interface.splatByteAll(
         self.fill_value,
         stream.length,
     ) catch return error.Overflow; // TODO FIX we don't know actually why this failed.
-                                   // std.Io.Writer only returns error.WriteFailed.
+    // std.Io.Writer only returns error.WriteFailed.
 }

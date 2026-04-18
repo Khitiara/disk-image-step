@@ -107,7 +107,7 @@ fn Executor(comptime T: type) type {
                             else => {
                                 var realpath_buffer: [std.fs.max_path_bytes]u8 = undefined;
                                 std.log.warn("cannot copy file {s}: {s} is not a supported file type!", .{
-                                    if (entry.dir.realPathFile(io,entry.path, &realpath_buffer)) |l| realpath_buffer[0..l] else |e| @errorName(e),
+                                    if (entry.dir.realPathFile(io, entry.path, &realpath_buffer)) |l| realpath_buffer[0..l] else |e| @errorName(e),
                                     @tagName(entry.kind),
                                 });
                             },

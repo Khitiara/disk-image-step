@@ -19,7 +19,7 @@ sector_align: ?c_uint = null,
 cluster_size: ?u32 = null,
 
 pub fn parse(ctx: dim.Context, stdio: std.Io) !dim.Content {
-    const fat_type = try ctx.parse_enum(stdio,FatType);
+    const fat_type = try ctx.parse_enum(stdio, FatType);
 
     const pf = try ctx.alloc_object(FAT);
     pf.* = .{
@@ -74,7 +74,7 @@ const Appender = struct {
         switch (op) {
             .label => try self.updater.set(.label, try ctx.parse_string(stdio)),
             .fats => try self.updater.set(.fats, try ctx.parse_enum(stdio, fatfs.FatTables)),
-            .@"root-size" => try self.updater.set(.rootdir_size, try ctx.parse_integer(stdio,c_uint, 0)),
+            .@"root-size" => try self.updater.set(.rootdir_size, try ctx.parse_integer(stdio, c_uint, 0)),
             .@"sector-align" => try self.updater.set(.sector_align, try ctx.parse_integer(stdio, c_uint, 0)),
             .@"cluster-size" => try self.updater.set(.cluster_size, try ctx.parse_integer(stdio, u32, 0)),
         }
@@ -242,7 +242,7 @@ const AtomicOps = struct {
         defer fs_file.close();
 
         var fs_file_buffer: [1024]u8 = undefined;
-        var adapter = fs_file.writer( &fs_file_buffer);
+        var adapter = fs_file.writer(&fs_file_buffer);
 
         _ = try reader.streamRemaining(&adapter.writer);
 

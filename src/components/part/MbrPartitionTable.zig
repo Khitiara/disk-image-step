@@ -238,7 +238,7 @@ pub fn render(table: *PartTable, io: std.Io, stream: *dim.BinaryStream) dim.Cont
         boot_sector[0x01FE] = 0x55;
         boot_sector[0x01FF] = 0xAA;
 
-        try stream.write(io,0, &boot_sector);
+        try stream.write(io, 0, &boot_sector);
     }
 
     for (part_infos, table.partitions) |maybe_info, maybe_part| {
