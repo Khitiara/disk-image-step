@@ -74,7 +74,7 @@ pub fn main(init: std.process.Init) !u8 {
 
     const io_iface = init.io;
 
-    const opts = try args.parseForCurrentProcess(Options, gpa, init.minimal.args, .print);
+    const opts = try args.parseForCurrentProcess(Options, init, .print);
     defer opts.deinit();
 
     const options = opts.options;
@@ -546,6 +546,7 @@ pub const FileName = struct {
             error.FileLocksUnsupported,
             error.FileBusy,
             error.PermissionDenied,
+            error.ReadOnlyFileSystem,
             => return error.IoError,
         };
 

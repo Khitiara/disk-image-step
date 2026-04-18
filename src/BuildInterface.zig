@@ -74,7 +74,7 @@ fn renderContent(
     var code: std.Io.Writer.Allocating = .init(allocator);
     defer code.deinit();
 
-    var variables: ContentWriter.VariableMap = .init(allocator);
+    var variables: ContentWriter.VariableMap = .empty;
 
     var cw: ContentWriter = .{
         .code = &code.writer,
@@ -82,7 +82,7 @@ fn renderContent(
         .vars = &variables,
     };
 
-    cw.render(content, io) catch @panic("out of memory");
+    cw.render(content, io, allocator) catch @panic("out of memory");
 
     const source = std.mem.trim(
         u8,
@@ -104,13 +104,13 @@ fn renderContent(
 }
 
 const ContentWriter = struct {
-    pub const VariableMap = std.StringArrayHashMap(struct { std.Build.LazyPath, ContentWriter.UsageHint });
+    pub const VariableMap = std.array_hash_map.String(struct { std.Build.LazyPath, ContentWriter.UsageHint });
 
     wfs: *std.Build.Step.WriteFile,
     code: *std.Io.Writer,
     vars: *VariableMap,
 
-    fn render(cw: ContentWriter, content: Content, io: std.Io) !void {
+    fn render(cw: ContentWriter, content: Content, io: std.Io, gpa: std.mem.Allocator) !void {
         // Always insert some padding before and after:
         try cw.code.writeAll(" ");
         errdefer cw.code.writeAll(" ") catch {};
@@ -125,7 +125,7 @@ const ContentWriter = struct {
             },
 
             .paste_file => |data| {
-                try cw.code.print("paste-file {f}", .{cw.fmtLazyPath(data, .file, io)});
+                try cw.code.print("paste-file {f}", .{cw.fmtLazyPath(data, .file, io, gpa)});
             },
 
             .mbr_part_table => |data| {
@@ -133,7 +133,7 @@ const ContentWriter = struct {
 
                 if (data.bootloader) |loader| {
                     try cw.code.writeAll("  bootloader ");
-                    try cw.render(loader.*, io);
+                    try cw.render(loader.*, io, gpa);
                     try cw.code.writeAll("\n");
                 }
 
@@ -154,7 +154,7 @@ const ContentWriter = struct {
                             try cw.code.print("    size {d}\n", .{size});
                         }
                         try cw.code.writeAll("    contains");
-                        try cw.render(part.data, io);
+                        try cw.render(part.data, io, gpa);
                         try cw.code.writeAll("\n");
                         try cw.code.writeAll("  endpart\n");
                     } else {
@@ -196,7 +196,7 @@ const ContentWriter = struct {
                         try cw.code.print("    size {d}\n", .{size});
                     }
                     try cw.code.writeAll("    contains");
-                    try cw.render(part.data, io);
+                    try cw.render(part.data, io, gpa);
                     try cw.code.writeAll("\n");
                     try cw.code.writeAll("  endpart\n");
                 }
@@ -214,14 +214,14 @@ const ContentWriter = struct {
                     });
                 }
 
-                try cw.renderFileSystemTree(data.tree, io);
+                try cw.renderFileSystemTree(data.tree, io, gpa);
 
                 try cw.code.writeAll("endfat\n");
             },
         }
     }
 
-    fn renderFileSystemTree(cw: ContentWriter, fs: FileSystem, io: std.Io) !void {
+    fn renderFileSystemTree(cw: ContentWriter, fs: FileSystem, io: std.Io, gpa: std.mem.Allocator) !void {
         for (fs.items) |item| {
             switch (item) {
                 .empty_dir => |dir| try cw.code.print("mkdir {f}\n", .{
@@ -230,16 +230,16 @@ const ContentWriter = struct {
 
                 .copy_dir => |copy| try cw.code.print("copy-dir {f} {f}\n", .{
                     fmtPath(copy.destination),
-                    cw.fmtLazyPath(copy.source, .directory, io),
+                    cw.fmtLazyPath(copy.source, .directory, io, gpa),
                 }),
 
                 .copy_file => |copy| try cw.code.print("copy-file {f} {f}\n", .{
                     fmtPath(copy.destination),
-                    cw.fmtLazyPath(copy.source, .file, io),
+                    cw.fmtLazyPath(copy.source, .file, io, gpa),
                 }),
 
                 .include_script => |script| try cw.code.print("!include {f}\n", .{
-                    cw.fmtLazyPath(script, .file, io),
+                    cw.fmtLazyPath(script, .file, io, gpa),
                 }),
             }
         }
@@ -286,7 +286,7 @@ const ContentWriter = struct {
         }
     };
     const LazyPathFormatter = std.fmt.Alt(
-        struct { ContentWriter, std.Build.LazyPath, UsageHint, std.Io },
+        struct { ContentWriter, std.Build.LazyPath, UsageHint, std.Io, std.mem.Allocator },
         formatLazyPath,
     );
     const UsageHint = enum { file, directory };
@@ -296,8 +296,9 @@ const ContentWriter = struct {
         path: std.Build.LazyPath,
         hint: UsageHint,
         io: std.Io,
+        gpa: std.mem.Allocator,
     ) LazyPathFormatter {
-        return .{ .data = .{ cw, path, hint, io } };
+        return .{ .data = .{ cw, path, hint, io, gpa } };
     }
 
     fn fmtPath(path: []const u8) PathFormatter {
@@ -305,10 +306,10 @@ const ContentWriter = struct {
     }
 
     fn formatLazyPath(
-        data: struct { ContentWriter, std.Build.LazyPath, UsageHint, std.Io },
+        data: struct { ContentWriter, std.Build.LazyPath, UsageHint, std.Io, std.mem.Allocator },
         writer: *std.Io.Writer,
     ) std.Io.Writer.Error!void {
-        const cw, const path, const hint, const io = data;
+        const cw, const path, const hint, const io, const gpa = data;
 
         switch (path) {
             .cwd_relative,
@@ -346,7 +347,7 @@ const ContentWriter = struct {
                 const var_id = cw.vars.count() + 1;
                 const var_name = cw.wfs.step.owner.fmt("PATH{}", .{var_id});
 
-                cw.vars.put(var_name, .{ path, hint }) catch return error.WriteFailed;
+                cw.vars.put(gpa, var_name, .{ path, hint }) catch return error.WriteFailed;
 
                 try writer.print("${s}", .{var_name});
             },
