@@ -125,7 +125,7 @@ const ContentWriter = struct {
             },
 
             .paste_file => |data| {
-                try cw.code.print("paste-file {f}", .{cw.fmtLazyPath(data, .file, io, gpa)});
+                try cw.code.print("paste-file {f}", .{cw.fmtLazyPath(data, .file, gpa)});
             },
 
             .mbr_part_table => |data| {
@@ -214,14 +214,14 @@ const ContentWriter = struct {
                     });
                 }
 
-                try cw.renderFileSystemTree(data.tree, io, gpa);
+                try cw.renderFileSystemTree(data.tree, gpa);
 
                 try cw.code.writeAll("endfat\n");
             },
         }
     }
 
-    fn renderFileSystemTree(cw: ContentWriter, fs: FileSystem, io: std.Io, gpa: std.mem.Allocator) !void {
+    fn renderFileSystemTree(cw: ContentWriter, fs: FileSystem,  gpa: std.mem.Allocator) !void {
         for (fs.items) |item| {
             switch (item) {
                 .empty_dir => |dir| try cw.code.print("mkdir {f}\n", .{
@@ -230,16 +230,16 @@ const ContentWriter = struct {
 
                 .copy_dir => |copy| try cw.code.print("copy-dir {f} {f}\n", .{
                     fmtPath(copy.destination),
-                    cw.fmtLazyPath(copy.source, .directory, io, gpa),
+                    cw.fmtLazyPath(copy.source, .directory, gpa),
                 }),
 
                 .copy_file => |copy| try cw.code.print("copy-file {f} {f}\n", .{
                     fmtPath(copy.destination),
-                    cw.fmtLazyPath(copy.source, .file, io, gpa),
+                    cw.fmtLazyPath(copy.source, .file, gpa),
                 }),
 
                 .include_script => |script| try cw.code.print("!include {f}\n", .{
-                    cw.fmtLazyPath(script, .file, io, gpa),
+                    cw.fmtLazyPath(script, .file, gpa),
                 }),
             }
         }
@@ -286,7 +286,7 @@ const ContentWriter = struct {
         }
     };
     const LazyPathFormatter = std.fmt.Alt(
-        struct { ContentWriter, std.Build.LazyPath, UsageHint, std.Io, std.mem.Allocator },
+        struct { ContentWriter, std.Build.LazyPath, UsageHint, std.mem.Allocator },
         formatLazyPath,
     );
     const UsageHint = enum { file, directory };
@@ -295,10 +295,9 @@ const ContentWriter = struct {
         cw: ContentWriter,
         path: std.Build.LazyPath,
         hint: UsageHint,
-        io: std.Io,
         gpa: std.mem.Allocator,
     ) LazyPathFormatter {
-        return .{ .data = .{ cw, path, hint, io, gpa } };
+        return .{ .data = .{ cw, path, hint, gpa } };
     }
 
     fn fmtPath(path: []const u8) PathFormatter {
@@ -306,52 +305,17 @@ const ContentWriter = struct {
     }
 
     fn formatLazyPath(
-        data: struct { ContentWriter, std.Build.LazyPath, UsageHint, std.Io, std.mem.Allocator },
+        data: struct { ContentWriter, std.Build.LazyPath, UsageHint,  std.mem.Allocator },
         writer: *std.Io.Writer,
     ) std.Io.Writer.Error!void {
-        const cw, const path, const hint, const io, const gpa = data;
+        const cw, const path, const hint, const gpa = data;
 
-        switch (path) {
-            .cwd_relative,
-            .dependency,
-            .src_path,
-            => {
+        const var_id = cw.vars.count() + 1;
+        const var_name = cw.wfs.step.owner.fmt("PATH{}", .{var_id});
 
-                // We can safely call getPath2 as we can fully resolve the path
-                // already
-                const rel_path = path.getPath2(cw.wfs.step.owner, &cw.wfs.step);
+        cw.vars.put(gpa, var_name, .{ path, hint }) catch return error.WriteFailed;
 
-                const full_path = if (!std.fs.path.isAbsolute(rel_path))
-                    std.Io.Dir.cwd().realPathFileAlloc(io, rel_path, cw.wfs.step.owner.allocator) catch @panic("oom")
-                else
-                    rel_path;
-
-                if (!std.fs.path.isAbsolute(full_path)) {
-                    const cwd = std.Io.Dir.cwd().realPathFileAlloc(io, ".", cw.wfs.step.owner.allocator) catch @panic("oom");
-                    std.debug.print("non-absolute path detected for {t}: cwd=\"{f}\" path=\"{f}\"\n", .{
-                        path,
-                        std.zig.fmtString(cwd),
-                        std.zig.fmtString(full_path),
-                    });
-                    @panic("non-absolute path detected!");
-                }
-
-                try writer.print("{f}", .{
-                    fmtPath(full_path),
-                });
-            },
-
-            .generated => {
-                // this means we can't emit the variable just verbatim, but we
-                // actually have a build-time dependency
-                const var_id = cw.vars.count() + 1;
-                const var_name = cw.wfs.step.owner.fmt("PATH{}", .{var_id});
-
-                cw.vars.put(gpa, var_name, .{ path, hint }) catch return error.WriteFailed;
-
-                try writer.print("${s}", .{var_name});
-            },
-        }
+        try writer.print("${s}", .{var_name});
     }
 };
 
@@ -472,7 +436,7 @@ pub const FileSystemBuilder = struct {
     pub fn copyFile(fsb: *FileSystemBuilder, source: std.Build.LazyPath, destination: []const u8) void {
         fsb.list.append(fsb.b.allocator, .{
             .copy_file = .{
-                .source = source.dupe(fsb.b),
+                .source = source.dupe(fsb.b.graph),
                 .destination = fsb.b.dupe(destination),
             },
         }) catch @panic("out of memory");
